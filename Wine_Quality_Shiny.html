@@ -1,0 +1,367 @@
+<!DOCTYPE html>
+
+<html>
+
+<head>
+
+<meta charset="utf-8" />
+<meta name="generator" content="pandoc" />
+<meta http-equiv="X-UA-Compatible" content="IE=EDGE" />
+
+
+<meta name="author" content="Katrina Tompkins" />
+
+<meta name="date" content="2024-08-11" />
+
+<title>Wine Quality Dashboard</title>
+
+
+<style type="text/css">
+  code{white-space: pre-wrap;}
+  span.smallcaps{font-variant: small-caps;}
+  span.underline{text-decoration: underline;}
+  div.column{display: inline-block; vertical-align: top; width: 50%;}
+  div.hanging-indent{margin-left: 1.5em; text-indent: -1.5em;}
+  ul.task-list{list-style: none;}
+    </style>
+
+<style type="text/css">code{white-space: pre;}</style>
+<script type="text/javascript">
+if (window.hljs) {
+  hljs.configure({languages: []});
+  hljs.initHighlightingOnLoad();
+  if (document.readyState && document.readyState === "complete") {
+    window.setTimeout(function() { hljs.initHighlighting(); }, 0);
+  }
+}
+</script>
+
+
+
+
+
+
+
+
+
+<style type = "text/css">
+.main-container {
+  max-width: 940px;
+  margin-left: auto;
+  margin-right: auto;
+}
+img {
+  max-width:100%;
+}
+.tabbed-pane {
+  padding-top: 12px;
+}
+.html-widget {
+  margin-bottom: 20px;
+}
+button.code-folding-btn:focus {
+  outline: none;
+}
+summary {
+  display: list-item;
+}
+details > summary > p:only-child {
+  display: inline;
+}
+pre code {
+  padding: 0;
+}
+</style>
+
+
+
+<!-- tabsets -->
+
+<style type="text/css">
+.tabset-dropdown > .nav-tabs {
+  display: inline-table;
+  max-height: 500px;
+  min-height: 44px;
+  overflow-y: auto;
+  border: 1px solid #ddd;
+  border-radius: 4px;
+}
+
+.tabset-dropdown > .nav-tabs > li.active:before, .tabset-dropdown > .nav-tabs.nav-tabs-open:before {
+  content: "\e259";
+  font-family: 'Glyphicons Halflings';
+  display: inline-block;
+  padding: 10px;
+  border-right: 1px solid #ddd;
+}
+
+.tabset-dropdown > .nav-tabs.nav-tabs-open > li.active:before {
+  content: "\e258";
+  font-family: 'Glyphicons Halflings';
+  border: none;
+}
+
+.tabset-dropdown > .nav-tabs > li.active {
+  display: block;
+}
+
+.tabset-dropdown > .nav-tabs > li > a,
+.tabset-dropdown > .nav-tabs > li > a:focus,
+.tabset-dropdown > .nav-tabs > li > a:hover {
+  border: none;
+  display: inline-block;
+  border-radius: 4px;
+  background-color: transparent;
+}
+
+.tabset-dropdown > .nav-tabs.nav-tabs-open > li {
+  display: block;
+  float: none;
+}
+
+.tabset-dropdown > .nav-tabs > li {
+  display: none;
+}
+</style>
+
+<!-- code folding -->
+
+
+
+
+</head>
+
+<body>
+
+
+<div class="container-fluid main-container">
+
+
+
+
+<div id="section-header">
+
+
+
+<h1 class="title toc-ignore">Wine Quality Dashboard</h1>
+<h4 class="author">Katrina Tompkins</h4>
+<h4 class="date">2024-08-11</h4>
+
+</div>
+
+
+<pre class="r"><code># Load necessary libraries
+library(shiny)
+library(tidyverse)</code></pre>
+<pre><code>## Warning: package &#39;readr&#39; was built under R version 4.4.1</code></pre>
+<pre><code>## ── Attaching core tidyverse packages ──────────────────────── tidyverse 2.0.0 ──
+## ✔ dplyr     1.1.4     ✔ readr     2.1.5
+## ✔ forcats   1.0.0     ✔ stringr   1.5.1
+## ✔ ggplot2   3.5.1     ✔ tibble    3.2.1
+## ✔ lubridate 1.9.3     ✔ tidyr     1.3.1
+## ✔ purrr     1.0.2     
+## ── Conflicts ────────────────────────────────────────── tidyverse_conflicts() ──
+## ✖ dplyr::filter() masks stats::filter()
+## ✖ dplyr::lag()    masks stats::lag()
+## ℹ Use the conflicted package (&lt;http://conflicted.r-lib.org/&gt;) to force all conflicts to become errors</code></pre>
+<pre class="r"><code># Define UI
+ui &lt;- fluidPage(
+  titlePanel(&quot;Wine Quality Predictor and Visualizer&quot;),
+  
+  sidebarLayout(
+    sidebarPanel(
+      fileInput(&quot;file&quot;, &quot;Upload Wine Data CSV File&quot;, accept = c(&quot;.csv&quot;)),
+      selectInput(&quot;ID&quot;, &quot;Wine ID:&quot;, choices = NULL),
+      selectInput(&quot;location&quot;, &quot;location:&quot;, choices = NULL),
+      actionButton(&quot;predict&quot;, &quot;Show Details&quot;),
+      hr(),
+      radioButtons(&quot;plotType&quot;, &quot;Plot Type:&quot;,
+                   choices = list(&quot;Histogram&quot; = &quot;hist&quot;,
+                                  &quot;Boxplot&quot; = &quot;box&quot;,
+                                  &quot;Scatter Plot&quot; = &quot;scatter&quot;)),
+      conditionalPanel(
+        condition = &quot;input.plotType == &#39;scatter&#39;&quot;,
+        checkboxInput(&quot;regression&quot;, &quot;Add Regression Line&quot;, value = FALSE)
+      ),
+      hr(),
+      actionButton(&quot;plot&quot;, &quot;Plot&quot;)
+    ),
+    
+    mainPanel(
+      textOutput(&quot;wineDetails&quot;),
+      plotOutput(&quot;plotOutput&quot;)
+    )
+  )
+)
+
+# Define server logic
+server &lt;- function(input, output, session) {
+  
+  wine_data &lt;- reactive({
+    req(input$file)
+    read.csv(input$file$datapath)
+  })
+  
+  observe({
+    req(wine_data())
+    data &lt;- wine_data()
+    
+    updateSelectInput(session, &quot;ID&quot;, choices = unique(data$Wine.ID))
+    updateSelectInput(session, &quot;location&quot;, choices = unique(data$Location))
+  })
+  
+  observeEvent(input$predict, {
+    req(wine_data())
+    data &lt;- wine_data()
+    
+    selected_data &lt;- data %&gt;%
+      filter(
+        Wine.ID == input$wine_id,
+        Location == input$location
+      )
+    
+    output$wineDetails &lt;- renderText({
+      if (nrow(selected_data) &gt; 0) {
+        wine_info &lt;- selected_data[1, ]
+        paste(&quot;Wine ID: &quot;, wine_info$Wine.ID, &quot;\n&quot;,
+              &quot;Location: &quot;, wine_info$location, &quot;\n&quot;,
+              &quot;Quality: &quot;, wine_info$quality, &quot;\n&quot;,
+              &quot;Acidity: &quot;, wine_info$fixed.acidity, &quot;\n&quot;,
+              &quot;Sugar: &quot;, wine_info$residual.sugar, &quot;\n&quot;,
+              &quot;pH: &quot;, wine_info$pH, &quot;\n&quot;,
+              &quot;Alcohol: &quot;, wine_info$alcohol)
+      } else {
+        &quot;No match found for the selected Wine ID and Location.&quot;
+      }
+    })
+  })
+  
+  plotData &lt;- reactive({
+    req(wine_data())
+    data &lt;- wine_data()
+    
+    switch(input$plotType,
+           &quot;hist&quot; = data,
+           &quot;box&quot; = data,
+           &quot;scatter&quot; = data)
+  })
+  
+  output$plotOutput &lt;- renderPlot({
+    req(input$plot)
+    
+    data &lt;- plotData()
+    
+    if (input$plotType == &quot;hist&quot;) {
+      ggplot(data, aes(x = quality)) +
+        geom_histogram(binwidth = 1, fill = &quot;blue&quot;, color = &quot;black&quot;) +
+        labs(title = &quot;Histogram of Wine Quality&quot;, x = &quot;Quality&quot;, y = &quot;Count&quot;)
+      
+    } else if (input$plotType == &quot;box&quot;) {
+      ggplot(data, aes(x = as.factor(quality), y = fixed.acidity)) +
+        geom_boxplot(fill = &quot;blue&quot;, color = &quot;black&quot;) +
+        labs(title = &quot;Boxplot of Acidity by Wine Quality&quot;, x = &quot;Quality&quot;, y = &quot;Fixed Acidity&quot;)
+      
+    } else if (input$plotType == &quot;scatter&quot;) {
+      p &lt;- ggplot(data, aes(x = fixed.acidity, y = quality)) +
+        geom_point() +
+        labs(title = &quot;Scatter Plot of Acidity vs Quality&quot;, x = &quot;Fixed Acidity&quot;, y = &quot;Quality&quot;)
+      
+      if (input$regression) {
+        p &lt;- p + geom_smooth(method = &quot;lm&quot;, col = &quot;red&quot;)
+      }
+      
+      print(p)
+    }
+  })
+}
+
+# Run the application 
+shinyApp(ui = ui, server = server)</code></pre>
+<iframe data-deferred-src="appb987d52b79ab49e9f869814702cbfa92/?w=&amp;__subapp__=1" width="100%" height="400" class="shiny-frame shiny-frame-deferred"></iframe>
+<pre class="r"><code># Install rsconnect if not already installed
+if (!require(rsconnect)) install.packages(&quot;rsconnect&quot;)</code></pre>
+<pre><code>## Loading required package: rsconnect</code></pre>
+<pre><code>## Warning: package &#39;rsconnect&#39; was built under R version 4.4.1</code></pre>
+<pre><code>## 
+## Attaching package: &#39;rsconnect&#39;
+## 
+## The following object is masked from &#39;package:shiny&#39;:
+## 
+##     serverInfo</code></pre>
+<pre class="r"><code># Load rsconnect library
+library(rsconnect)
+
+# Deploy the app
+rsconnect::deployApp(&quot;C:/Users/kmtom/OneDrive/SMU/MSDS/Assignments/Project 2&quot;)</code></pre>
+<pre><code>## ── Preparing for deployment ────────────────────────────────────────────────────
+## ✔ Re-deploying &quot;project_2&quot; using &quot;server: shinyapps.io / username: kmtdds&quot;
+## ℹ Looking up application with id &quot;12407396&quot;...
+## ✔ Found application &lt;https://kmtdds.shinyapps.io/project_2/&gt;
+## ℹ Bundling 125 files: &#39;.RData&#39;, &#39;DDS DS 6306 Project 2 Wine Quality.docx&#39;, &#39;DDS DS 6306 Project 2 Wine Quality_GH.docx&#39;, &#39;Katrina_Tompkins_Wine_Quality.pptx&#39;, &#39;Powerpoint_Outline.docx&#39;, &#39;Rshiny.docx&#39;, &#39;Wine Test Set.csv&#39;, &#39;Wine Train Set.csv&#39;, &#39;Wine_Plots.pptx&#39;, &#39;Wine_Quality.R&#39;, &#39;Wine_Quality_MD.Rmd&#39;, &#39;Wine_Quality_MD_files/figure-docx/unnamed-chunk-1-1.png&#39;, &#39;Wine_Quality_MD_files/figure-docx/unnamed-chunk-2-1.png&#39;, &#39;Wine_Quality_MD_files/figure-docx/unnamed-chunk-2-10.png&#39;, &#39;Wine_Quality_MD_files/figure-docx/unnamed-chunk-2-11.png&#39;, &#39;Wine_Quality_MD_files/figure-docx/unnamed-chunk-2-12.png&#39;, &#39;Wine_Quality_MD_files/figure-docx/unnamed-chunk-2-13.png&#39;, &#39;Wine_Quality_MD_files/figure-docx/unnamed-chunk-2-2.png&#39;, …, &#39;Wine_Quality_Predictions_Final.csv&#39;, and &#39;Wine_Quality_Shiny.Rmd&#39;
+## ℹ Capturing R dependencies with renv
+## ✔ Found 159 dependencies
+## ✔ Created 21,673,028b bundle
+## ℹ Uploading bundle...
+## ✔ Uploaded bundle with id 8970877
+## ── Deploying to server ─────────────────────────────────────────────────────────</code></pre>
+<pre><code>## Waiting for task: 1445983010
+##   building: Parsing manifest
+##   building: Building image: 10888850
+##   building: Installing system dependencies
+##   building: Fetching packages
+##   building: Installing packages
+##   building: Installing files
+##   building: Pushing image: 10888850
+##   deploying: Starting instances
+##   rollforward: Activating new instances
+##   success: Stopping old instances</code></pre>
+<pre><code>## ── Deployment complete ─────────────────────────────────────────────────────────
+## ✔ Successfully deployed to &lt;https://kmtdds.shinyapps.io/project_2/&gt;</code></pre>
+
+
+
+
+</div>
+
+<script>
+
+// add bootstrap table styles to pandoc tables
+function bootstrapStylePandocTables() {
+  $('tr.odd').parent('tbody').parent('table').addClass('table table-condensed');
+}
+$(document).ready(function () {
+  bootstrapStylePandocTables();
+});
+
+
+</script>
+
+<!-- tabsets -->
+
+<script>
+$(document).ready(function () {
+  window.buildTabsets("section-TOC");
+});
+
+$(document).ready(function () {
+  $('.tabset-dropdown > .nav-tabs > li').click(function () {
+    $(this).parent().toggleClass('nav-tabs-open');
+  });
+});
+</script>
+
+<!-- code folding -->
+
+
+<!-- dynamically load mathjax for compatibility with self-contained -->
+<script>
+  (function () {
+    var script = document.createElement("script");
+    script.type = "text/javascript";
+    script.src  = "https://mathjax.rstudio.com/latest/MathJax.js?config=TeX-AMS-MML_HTMLorMML";
+    document.getElementsByTagName("head")[0].appendChild(script);
+  })();
+</script>
+
+</body>
+</html>
